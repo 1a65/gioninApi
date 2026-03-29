@@ -8,32 +8,34 @@ namespace Gionin;
  * @package Gionin
  * @author Raphael Giovanini
  **/
-class Api{
+class Api
+{
+    protected bool $_debug = false;
 
-    protected $_debug = false;
-
-    protected $_baseUrl = 'https://api.gionin.com';
-    protected $_queryUrl = [
+    protected string $_baseUrl = 'https://api.gionin.com';
+    protected array $_queryUrl = [
         'schema' => '/v1/{user}/{app}',
         'table'  => '/v1/{user}/{app}/{table}',
     ];
 
-    protected $_user = '';
-    protected $_authUser;
-    protected $_authKey;
-    protected $_method = 'GET';
-    protected $_data = [];
+    protected string $_user = '';
+    protected ?string $_authUser = null;
+    protected ?string $_authKey = null;
+    protected string $_method = 'GET';
+    protected array $_data = [];
+    protected string $_url = '';
+    protected array $_headers = [];
 
-    protected $app = '';
-    protected $table = '';
+    protected string $app = '';
+    protected string $table = '';
 
     /**
      * Set credentials
      *
      * @param string $user Master account user
-     * @author Raphael Giovanini
      **/
-    public function setUser($user){
+    public function setUser(string $user): void
+    {
         $this->_user = $user;
     }
 
@@ -41,9 +43,9 @@ class Api{
      * Set key to credentials
      *
      * @param string $key application user password
-     * @author Raphael Giovanini
      **/
-    public function setAuthKey($key){
+    public function setAuthKey(string $key): void
+    {
         $this->_authKey = $key;
     }
 
@@ -51,9 +53,9 @@ class Api{
      * Set user to credentials
      *
      * @param string $user application user
-     * @author Raphael Giovanini
      **/
-    public function setAuthUser($user){
+    public function setAuthUser(string $user): void
+    {
         $this->_authUser = $user;
     }
 
@@ -62,9 +64,9 @@ class Api{
      *
      * @param string $user application user
      * @param string $secret application user password
-     * @author Raphael Giovanini
      **/
-    public function setCredentials($user, $secret){
+    public function setCredentials(string $user, string $secret): void
+    {
         $this->setAuthKey($secret);
         $this->setAuthUser($user);
     }
@@ -72,11 +74,11 @@ class Api{
     /**
      * Set method to call api
      *
-     * @param string $method Type of method that should be used ('GET', 'POST', 'PUT', 'DELETE', 'PATCH')
-     * @author Raphael Giovanini
+     * @param string $method Type of method ('GET', 'POST', 'PUT', 'DELETE')
      **/
-    public function setMethod($method){
-        if (in_array($method, ['GET','POST','PUT','DELETE'])) {
+    public function setMethod(string $method): void
+    {
+        if (in_array($method, ['GET', 'POST', 'PUT', 'DELETE'])) {
             $this->_method = $method;
         }
     }
@@ -84,165 +86,135 @@ class Api{
     /**
      * Set data to sent in api
      *
-     * @param array $data Data to be sent along with the reques
-     * @author Raphael giovanini
+     * @param array $data Data to be sent along with the request
      **/
-    public function setData($data = [])
+    public function setData(array $data = []): void
     {
         $this->_data = $data;
     }
 
     /**
      * Set parameter app
-     *
-     * @return void
-     * @author Raphael Giovanini
      **/
-    public function setApp($v){
+    public function setApp(string $v): void
+    {
         $this->app = $v;
     }
 
     /**
      * Set parameter table
-     *
-     * @return void
-     * @author Raphael Giovanini
      **/
-    public function setTable($v){
+    public function setTable(string $v): void
+    {
         $this->table = $v;
     }
 
     /**
      * Set parameter url
-     *
-     * @return void
-     * @author Raphael Giovanini
      **/
-    public function setUrl($type = 'table'){
-        $this->_url = $this->_baseUrl.$this->_queryUrl[$type];
+    public function setUrl(string $type = 'table'): void
+    {
+        $this->_url = $this->_baseUrl . $this->_queryUrl[$type];
     }
 
     /**
      * Set parameters user to url in api
-     *
-     * @return void
-     * @author Raphael Giovanini
      **/
-    protected function setUserUrl()
+    protected function setUserUrl(): void
     {
-        if (!isset($this->_user[1])) {
-            throw new Exception("user not declared", 1);
+        if (strlen($this->_user) < 2) {
+            throw new \Exception("user not declared", 1);
         }
         $this->_url = str_replace('{user}', $this->_user, $this->_url);
     }
 
     /**
      * Set parameters app to url in api
-     *
-     * @return void
-     * @author Raphael Giovanini
      **/
-    protected function setAppUrl()
+    protected function setAppUrl(): void
     {
-        if (!isset($this->app[1])) {
-            throw new Exception("App not declared", 1);
+        if (strlen($this->app) < 2) {
+            throw new \Exception("App not declared", 1);
         }
         $this->_url = str_replace('{app}', $this->app, $this->_url);
     }
 
     /**
      * Set parameters table in url to api
-     *
-     * @return void
-     * @author Raphael Giovanini
      **/
-    protected function setTableUrl()
+    protected function setTableUrl(): void
     {
         $this->setUrl('table');
-
         $this->setUserUrl();
-
         $this->setAppUrl();
 
-        if (!isset($this->table[1])) {
-            throw new Exception("Table not declared", 1);
+        if (strlen($this->table) < 2) {
+            throw new \Exception("Table not declared", 1);
         }
         $this->_url = str_replace('{table}', $this->table, $this->_url);
     }
 
     /**
-     * Set parameters debug to teste APIi
-     *
-     * @return void
-     * @author Raphael Giovanini
+     * Set debug mode
      **/
-    public function setDebug($v){
-	   $this->_debug = ($v) ?: false;
+    public function setDebug(bool $v): void
+    {
+        $this->_debug = $v;
     }
 
     /**
-     * API call method for sending requests using GET, POST, PUT, DELETE OR PATCH
+     * API call method for sending requests using GET, POST, PUT or DELETE
      *
-     * @return array
-     * @author Raphael Giovanini
+     * @return array|string|false
      **/
-    public function request(){
+    public function request(): array|string|false
+    {
         $url = $this->_url;
 
-        if ($this->_method=='GET') {
+        if ($this->_method === 'GET') {
             $url .= '?' . http_build_query($this->_data);
         }
 
-        $ch = \curl_init();
+        $ch = curl_init();
 
         if (!empty($this->_headers)) {
-            \curl_setopt($ch, CURLOPT_HTTPHEADER, $this->_headers);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $this->_headers);
         }
 
         $curl_options = [
             CURLOPT_VERBOSE        => false,
             CURLOPT_FORBID_REUSE   => true,
-            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HEADER         => false,
-            CURLOPT_TIMEOUT        => 500,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_FOLLOWLOCATION => true
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_FOLLOWLOCATION => true,
         ];
 
-        \curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_USERPWD, $this->_authUser . ":" . $this->_authKey);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $this->_method);
+        curl_setopt_array($ch, $curl_options);
 
-        \curl_setopt($ch, CURLOPT_USERPWD, $this->_authUser . ":" . $this->_authKey);
-
-        \curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $this->_method);
-
-        \curl_setopt_array($ch, $curl_options);
-
-        if ($this->_method!='GET') {
+        if ($this->_method !== 'GET') {
             $dataString = json_encode($this->_data);
-            \curl_setopt($ch, CURLOPT_POSTFIELDS, $dataString);
-            \curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $dataString);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'Content-Type: application/json',
-                'Content-Length: ' . strlen($dataString))
-            );
+                'Content-Length: ' . strlen($dataString),
+            ]);
         }
 
-        $result      = \curl_exec($ch);
-        $error       = \curl_error($ch);
-        $information = \curl_getinfo($ch);
-        $http_code   = \curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-        \curl_close($ch);
+        $result = curl_exec($ch);
+        $error = curl_error($ch);
 
         if ($this->_debug) {
-
+            $information = curl_getinfo($ch);
             echo '<pre>';
-            echo date('Y-m-d H:i:s')."\n";
-            echo 'Url: ' . $this->_url . ' - Method: ' . $this->_method ."\n";
-            var_dump(
-                $this->_data,
-                $result
-
-            );
+            echo date('Y-m-d H:i:s') . "\n";
+            echo 'Url: ' . $this->_url . ' - Method: ' . $this->_method . "\n";
+            var_dump($this->_data, $result);
             if ($error) {
                 echo $error . "\n";
             }
@@ -250,11 +222,12 @@ class Api{
             echo '</pre>';
         }
 
+        curl_close($ch);
+
         if ($result) {
             return json_decode($result, true);
         }
 
         return $result;
     }
-
 }

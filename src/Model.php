@@ -4,151 +4,168 @@ namespace Gionin;
 
 /**
  * Class for using API with a model
- * @package default
+ *
+ * @package Gionin
  * @author  Raphael Giovanini
-**/
-class Model extends Api {
-
-    protected $_findTypes = [
+ **/
+class Model extends Api
+{
+    protected array $_findTypes = [
         'all',
-        'first'
+        'first',
     ];
-    protected $_conditions = [];
-    protected $_fields = [];
-    protected $_order = [
-        'default' => 'asc'
+    protected array $_conditions = [];
+    protected array $_fields = [];
+    protected array $_order = [
+        'default' => 'asc',
     ];
 
     /**
-     * Retorna o total da ultima busca
-     *
-     * @var int
+     * Total from last query
      **/
-    public $total;
+    public int $total = 0;
 
     public function __construct(
-        $user = '',
-        $appUsername = '',
-        $appSecret = '',
-        $app = false,
-        $table = false,
-        $debug = false
-    ){
-
+        string $user = '',
+        string $appUsername = '',
+        string $appSecret = '',
+        string $app = '',
+        string $table = '',
+        bool $debug = false
+    ) {
         $this->setUser($user);
-
         $this->setCredentials($appUsername, $appSecret);
 
-        $varifyValue = function($obj, $method, $value){
-               $value && $obj->$method($value);
-        };
-
-        $varifyValue($this, 'setApp', $app);
-        $varifyValue($this, 'setTable', $table);
-        $varifyValue($this, 'setDebug', $debug);
-
+        if ($app !== '') {
+            $this->setApp($app);
+        }
+        if ($table !== '') {
+            $this->setTable($table);
+        }
+        if ($debug) {
+            $this->setDebug($debug);
+        }
     }
 
-    protected function setOperation($method, $data){
+    protected function setOperation(string $method, array $data): array|string|false
+    {
         $this->setTableUrl();
         $this->setMethod($method);
         $this->setData($data);
         return $this->request();
     }
 
-    public function reset(){
+    public function reset(): void
+    {
         $this->_fields = [];
-        $this->_order  = ['default' => 'asc'];
+        $this->_order = ['default' => 'asc'];
     }
 
-    protected function setOrder($order = []){
-        $order !== [] && $this->_order = $order;
+    protected function setOrder(array $order = []): void
+    {
+        if ($order !== []) {
+            $this->_order = $order;
+        }
     }
 
-    protected function setFields($fields = []){
-        $fields !== [] && $this->_fields = $fields;
+    protected function setFields(array $fields = []): void
+    {
+        if ($fields !== []) {
+            $this->_fields = $fields;
+        }
     }
 
-    public function insert($data){
+    public function insert(array $data): array|string|false
+    {
         return $this->setOperation('POST', $data);
     }
 
-    public function update($data){
+    public function update(array $data): array|string|false
+    {
         return $this->setOperation('PUT', $data);
     }
 
-    public function delete($data){
+    public function delete(array $data): array|string|false
+    {
         return $this->setOperation('DELETE', $data);
     }
 
-    private function traitamentData($data){
-        if(isset($data['order'])){
+    private function treatData(array $data): void
+    {
+        if (isset($data['order'])) {
             unset($data['order']);
         }
-        if(isset($data['fields'])){
-            $this->traitamentFields($data);
+        if (isset($data['fields'])) {
+            $this->treatFields($data);
             unset($data['fields']);
         }
         if (isset($data['conditions'])) {
             $this->_conditions = $data['conditions'];
-            $this->traitamentOrder($data);
-            $this->traitamentFields($data);
+            $this->treatOrder($data);
+            $this->treatFields($data);
             return;
         }
         $this->_conditions = $data;
     }
 
-    private function traitamentOrder($data){
-        return isset($data['order']) && is_array($data['order']) && $this->setOrder($data['order']);
-    }
-
-    private function traitamentFields($data){
-        isset($data['fields']) && is_array($data['fields']) && $this->setFields($data['fields']);
-    }
-
-    public function find($type = 'all', $data = [], $page = 1, $limit = 20){
-
-        if (!in_array($type, $this->_findTypes)) {
-            throw new Exception("Error type for find", 1);
+    private function treatOrder(array $data): void
+    {
+        if (isset($data['order']) && is_array($data['order'])) {
+            $this->setOrder($data['order']);
         }
-	$this->reset();
-        $this->traitamentOrder($data);
-        $this->traitamentData($data);
+    }
+
+    private function treatFields(array $data): void
+    {
+        if (isset($data['fields']) && is_array($data['fields'])) {
+            $this->setFields($data['fields']);
+        }
+    }
+
+    public function find(string $type = 'all', array $data = [], int $page = 1, int $limit = 20): array|string|false
+    {
+        if (!in_array($type, $this->_findTypes)) {
+            throw new \Exception("Error type for find", 1);
+        }
+
+        $this->reset();
+        $this->treatOrder($data);
+        $this->treatData($data);
 
         $data['json'] = json_encode([
-            'q' => $this->_conditions,
-            'page' => $page,
-            'limit' => $limit,
+            'q'      => $this->_conditions,
+            'page'   => $page,
+            'limit'  => $limit,
             'fields' => $this->_fields,
-            'order' => $this->_order
+            'order'  => $this->_order,
         ]);
 
-        if($return = $this->setOperation('GET', $data)){
-            $this->total = $return['_total'];
+        $return = $this->setOperation('GET', $data);
+
+        if ($return && is_array($return)) {
+            $this->total = $return['_total'] ?? 0;
             unset($return['_total']);
-        }
-        if(isset($return[0])){
-            if ($type == 'first') {
+
+            if ($type === 'first' && isset($return[0])) {
                 return $return[0];
             }
         }
 
         return $return;
-
     }
 
-    public function findAll($data = [], $page = 1 , $limit = 1000000){
-        return $this->find('all', $data, $page , $limit);
+    public function findAll(array $data = [], int $page = 1, int $limit = 1000000): array|string|false
+    {
+        return $this->find('all', $data, $page, $limit);
     }
 
-    public function findFirst($data = []){
-
+    public function findFirst(array $data = []): array|string|false
+    {
         return $this->find('first', $data);
-
     }
 
-    public function findById($id){
+    public function findById(string $id): array|string|false
+    {
         return $this->find('first', ['_id' => $id], 1, 1);
     }
-
 }
