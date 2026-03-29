@@ -3,7 +3,13 @@
 namespace Gionin\Tests;
 
 use Gionin\Api;
+use Gionin\Exception\AuthenticationException;
+use Gionin\Exception\ValidationException;
+use Gionin\Response\ApiResponse;
+use Nyholm\Psr7\Response;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestInterface;
 
 class ApiTest extends TestCase
 {
@@ -67,7 +73,7 @@ class ApiTest extends TestCase
 
     public function testSetTableUrlThrowsWithoutUser(): void
     {
-        $this->expectException(\Exception::class);
+        $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('user not declared');
 
         $this->api->setApp('myapp');
@@ -79,7 +85,7 @@ class ApiTest extends TestCase
 
     public function testSetTableUrlThrowsWithoutApp(): void
     {
-        $this->expectException(\Exception::class);
+        $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('App not declared');
 
         $this->api->setUser('testuser');
@@ -91,7 +97,7 @@ class ApiTest extends TestCase
 
     public function testSetTableUrlThrowsWithoutTable(): void
     {
-        $this->expectException(\Exception::class);
+        $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('Table not declared');
 
         $this->api->setUser('testuser');
@@ -117,13 +123,44 @@ class ApiTest extends TestCase
         );
     }
 
-    public function testSetDebug(): void
+    public function testRequestReturnsApiResponse(): void
     {
-        $this->api->setDebug(true);
-        $ref = new \ReflectionProperty($this->api, '_debug');
-        $this->assertTrue($ref->getValue($this->api));
+        $mockClient = $this->createMock(ClientInterface::class);
+        $mockClient->method('sendRequest')
+            ->willReturn(new Response(200, [], '{"name":"test"}'));
 
-        $this->api->setDebug(false);
-        $this->assertFalse($ref->getValue($this->api));
+        $this->api->setHttpClient($mockClient);
+        $this->api->setUser('testuser');
+        $this->api->setApp('myapp');
+        $this->api->setTable('mytable');
+
+        $ref = new \ReflectionMethod($this->api, 'setTableUrl');
+        $ref->invoke($this->api);
+
+        $response = $this->api->request();
+
+        $this->assertInstanceOf(ApiResponse::class, $response);
+        $this->assertEquals(200, $response->statusCode);
+        $this->assertEquals(['name' => 'test'], $response->data);
+        $this->assertTrue($response->isSuccessful());
+    }
+
+    public function testRequestThrowsOnAuthentication(): void
+    {
+        $this->expectException(AuthenticationException::class);
+
+        $mockClient = $this->createMock(ClientInterface::class);
+        $mockClient->method('sendRequest')
+            ->willReturn(new Response(401, [], '{"error":"unauthorized"}'));
+
+        $this->api->setHttpClient($mockClient);
+        $this->api->setUser('testuser');
+        $this->api->setApp('myapp');
+        $this->api->setTable('mytable');
+
+        $ref = new \ReflectionMethod($this->api, 'setTableUrl');
+        $ref->invoke($this->api);
+
+        $this->api->request();
     }
 }

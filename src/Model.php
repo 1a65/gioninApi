@@ -2,6 +2,13 @@
 
 namespace Gionin;
 
+use Gionin\Exception\ValidationException;
+use Gionin\Iterator\PaginatedIterator;
+use Gionin\Response\ApiResponse;
+use Gionin\Response\PaginatedResponse;
+use Psr\Http\Client\ClientInterface;
+use Psr\Log\LoggerInterface;
+
 /**
  * Class for using API with a model
  *
@@ -31,8 +38,11 @@ class Model extends Api
         string $appSecret = '',
         string $app = '',
         string $table = '',
-        bool $debug = false
+        ?ClientInterface $httpClient = null,
+        ?LoggerInterface $logger = null,
     ) {
+        parent::__construct($httpClient, $logger);
+
         $this->setUser($user);
         $this->setCredentials($appUsername, $appSecret);
 
@@ -42,12 +52,9 @@ class Model extends Api
         if ($table !== '') {
             $this->setTable($table);
         }
-        if ($debug) {
-            $this->setDebug($debug);
-        }
     }
 
-    protected function setOperation(string $method, array $data): array|string|false
+    protected function setOperation(string $method, array $data): ApiResponse
     {
         $this->setTableUrl();
         $this->setMethod($method);
@@ -75,17 +82,17 @@ class Model extends Api
         }
     }
 
-    public function insert(array $data): array|string|false
+    public function insert(array $data): ApiResponse
     {
         return $this->setOperation('POST', $data);
     }
 
-    public function update(array $data): array|string|false
+    public function update(array $data): ApiResponse
     {
         return $this->setOperation('PUT', $data);
     }
 
-    public function delete(array $data): array|string|false
+    public function delete(array $data): ApiResponse
     {
         return $this->setOperation('DELETE', $data);
     }
@@ -122,10 +129,10 @@ class Model extends Api
         }
     }
 
-    public function find(string $type = 'all', array $data = [], int $page = 1, int $limit = 20): array|string|false
+    public function find(string $type = 'all', array $data = [], int $page = 1, int $limit = 20): PaginatedResponse|ApiResponse
     {
         if (!in_array($type, $this->_findTypes)) {
-            throw new \Exception("Error type for find", 1);
+            throw new ValidationException("Error type for find");
         }
 
         $this->reset();
@@ -140,32 +147,64 @@ class Model extends Api
             'order'  => $this->_order,
         ]);
 
-        $return = $this->setOperation('GET', $data);
+        $response = $this->setOperation('GET', $data);
 
-        if ($return && is_array($return)) {
-            $this->total = $return['_total'] ?? 0;
-            unset($return['_total']);
+        if ($response->data !== null) {
+            $total = $response->data['_total'] ?? 0;
+            $items = $response->data;
+            unset($items['_total']);
 
-            if ($type === 'first' && isset($return[0])) {
-                return $return[0];
+            // Re-index array
+            $items = array_values($items);
+
+            $this->total = $total;
+
+            $paginated = new PaginatedResponse(
+                $response->statusCode,
+                $response->rawBody,
+                $total,
+                $items,
+                $page,
+                $limit,
+            );
+
+            if ($type === 'first' && isset($items[0])) {
+                return new PaginatedResponse(
+                    $response->statusCode,
+                    $response->rawBody,
+                    $total,
+                    [$items[0]],
+                    $page,
+                    1,
+                );
             }
+
+            return $paginated;
         }
 
-        return $return;
+        return $response;
     }
 
-    public function findAll(array $data = [], int $page = 1, int $limit = 1000000): array|string|false
+    public function findAll(array $data = [], int $page = 1, int $limit = 1000000): PaginatedResponse|ApiResponse
     {
         return $this->find('all', $data, $page, $limit);
     }
 
-    public function findFirst(array $data = []): array|string|false
+    public function findFirst(array $data = []): PaginatedResponse|ApiResponse
     {
         return $this->find('first', $data);
     }
 
-    public function findById(string $id): array|string|false
+    public function findById(string $id): PaginatedResponse|ApiResponse
     {
         return $this->find('first', ['_id' => $id], 1, 1);
+    }
+
+    /**
+     * Lazy paginated iterator - fetches pages on demand
+     */
+    public function findLazy(array $data = [], int $limit = 100): PaginatedIterator
+    {
+        return new PaginatedIterator($this, $data, $limit);
     }
 }

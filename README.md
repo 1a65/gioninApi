@@ -1,6 +1,6 @@
-# Gionin API - PHP Wrapper
+# Gionin API - PHP SDK
 
-PHP wrapper para a API REST da Gionin. Fornece uma interface Model para operações CRUD com suporte a queries, paginação, ordenação e seleção de campos.
+PHP SDK para a API REST da Gionin. Fornece uma interface Model para operações CRUD com suporte a queries, paginação, ordenação, seleção de campos, retry automático, rate limiting, cache e logging.
 
 ## Requisitos
 
@@ -15,24 +15,11 @@ composer require 1a65/gionin-api
 
 ## Docker
 
-### Subir o container
-
 ```bash
 docker compose build
-docker compose run --rm app php -v   # verificar PHP
 docker compose run --rm app composer install
-```
-
-### Rodar testes
-
-```bash
-docker compose run --rm test
-```
-
-### Shell interativo
-
-```bash
-docker compose run --rm app php -a
+docker compose run --rm test              # rodar testes
+docker compose run --rm app php -a        # shell interativo
 ```
 
 ## Uso Rápido
@@ -45,79 +32,134 @@ $model = new Model(
     appUsername: 'app_user',
     appSecret: 'app_secret',
     app: 'myapp',
-    table: 'users'
+    table: 'users',
 );
 ```
 
-### Inserir
+### CRUD
 
 ```php
-$result = $model->insert([
-    'name' => 'João Silva',
-    'email' => 'joao@example.com',
-]);
-```
+// Inserir
+$response = $model->insert(['name' => 'João', 'email' => 'joao@example.com']);
+echo $response->statusCode; // 201
 
-### Buscar todos
+// Buscar todos
+$response = $model->findAll();
+echo $response->total;       // total de registros
+print_r($response->items);   // array de resultados
 
-```php
-$results = $model->findAll();
-```
-
-### Buscar com condições
-
-```php
-$results = $model->find('all', [
+// Buscar com condições, campos e ordenação
+$response = $model->find('all', [
     'conditions' => ['status' => 'active'],
     'fields' => ['name', 'email'],
     'order' => ['name' => 'asc'],
 ], page: 1, limit: 20);
 
-echo $model->total; // total de registros encontrados
+// Buscar primeiro
+$response = $model->findFirst(['email' => 'joao@example.com']);
+
+// Buscar por ID
+$response = $model->findById('64a1b2c3d4e5f6');
+
+// Atualizar
+$response = $model->update(['_id' => '64a1b2c3d4e5f6', 'name' => 'João Santos']);
+
+// Deletar
+$response = $model->delete(['_id' => '64a1b2c3d4e5f6']);
 ```
 
-### Buscar primeiro
+### Paginação Lazy (Iterator)
 
 ```php
-$user = $model->findFirst(['email' => 'joao@example.com']);
+// Busca páginas sob demanda, sem carregar tudo na memória
+foreach ($model->findLazy(['conditions' => ['active' => true]], limit: 100) as $item) {
+    echo $item['name'];
+}
 ```
 
-### Buscar por ID
+## Features Avançadas
+
+### Retry com Backoff Exponencial
 
 ```php
-$user = $model->findById('64a1b2c3d4e5f6');
+use Gionin\Http\CurlClient;
+use Gionin\Http\RetryClient;
+
+$httpClient = new RetryClient(
+    client: new CurlClient(),
+    maxRetries: 3,
+    baseDelayMs: 1000,
+    multiplier: 2.0,
+);
+
+$model = new Model(
+    user: 'master_user',
+    appUsername: 'app_user',
+    appSecret: 'app_secret',
+    app: 'myapp',
+    table: 'users',
+    httpClient: $httpClient,
+);
 ```
 
-### Atualizar
+### Rate Limiting
 
 ```php
-$result = $model->update([
-    '_id' => '64a1b2c3d4e5f6',
-    'name' => 'João Santos',
-]);
+use Gionin\Http\CurlClient;
+use Gionin\Http\RateLimitedClient;
+
+$httpClient = new RateLimitedClient(
+    client: new CurlClient(),
+    maxTokens: 10.0,    // máximo de tokens
+    refillRate: 10.0,    // tokens por segundo
+);
 ```
 
-### Deletar
+### Cache (PSR-16)
 
 ```php
-$result = $model->delete(['_id' => '64a1b2c3d4e5f6']);
+use Gionin\Http\CurlClient;
+use Gionin\Http\CachingClient;
+
+$httpClient = new CachingClient(
+    client: new CurlClient(),
+    cache: $yourPsr16Cache,   // qualquer implementação PSR-16
+    defaultTtl: 300,          // 5 minutos
+);
 ```
 
-## Uso direto da API
+### Composição (Retry + Rate Limit + Cache)
 
 ```php
-use Gionin\Api;
+use Gionin\Http\{CurlClient, RetryClient, RateLimitedClient, CachingClient};
 
-$api = new Api();
-$api->setUser('master_user');
-$api->setCredentials('app_user', 'app_secret');
-$api->setApp('myapp');
-$api->setTable('users');
-$api->setTableUrl();
-$api->setMethod('GET');
-$api->setData(['json' => '{"q":{},"page":1,"limit":10}']);
+$httpClient = new RetryClient(
+    client: new RateLimitedClient(
+        client: new CachingClient(
+            client: new CurlClient(),
+            cache: $cache,
+        ),
+    ),
+);
 
-$response = $api->request();
+$model = new Model(/* ... */ httpClient: $httpClient);
+```
+
+### PSR-3 Logging
+
+```php
+use Psr\Log\LoggerInterface;
+
+$model = new Model(/* ... */ logger: $monolog);
+// Logs em nível debug para request/response
+```
+
+### PSR-18 HTTP Client
+
+Aceita qualquer cliente PSR-18 (Guzzle, Symfony HttpClient, etc.):
+
+```php
+$model = new Model(/* ... */ httpClient: $guzzleClient);
 ```
 
 ## Utilitário UTF-8
@@ -125,30 +167,29 @@ $response = $api->request();
 ```php
 use Gionin\Utf8String;
 
-$clean = Utf8String::noAccents('São Paulo');        // "Sao Paulo"
-$lower = Utf8String::lowerAndNoAccents('São Paulo'); // "sao paulo"
-$isUtf = Utf8String::isUTF8('texto');                // true
+Utf8String::noAccents('São Paulo');        // "Sao Paulo"
+Utf8String::lowerAndNoAccents('São Paulo'); // "sao paulo"
+Utf8String::isUTF8('texto');                // true
 ```
 
-## Testes
-
-```bash
-composer test
-# ou
-vendor/bin/phpunit
-```
-
-## Debug
+## Exceptions
 
 ```php
-$model = new Model(
-    user: 'master_user',
-    appUsername: 'app_user',
-    appSecret: 'app_secret',
-    app: 'myapp',
-    table: 'users',
-    debug: true
-);
+use Gionin\Exception\{
+    GioninException,           // base
+    ValidationException,       // campos obrigatórios faltando
+    AuthenticationException,   // 401/403
+    ConnectionException,       // falha de rede/cURL
+};
+```
+
+## Testes & Qualidade
+
+```bash
+composer test        # PHPUnit (33 testes)
+composer stan        # PHPStan (nível 5)
+composer cs-check    # PHP-CS-Fixer (dry-run)
+composer cs-fix      # PHP-CS-Fixer (auto-fix)
 ```
 
 ## Licença

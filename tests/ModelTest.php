@@ -2,8 +2,13 @@
 
 namespace Gionin\Tests;
 
+use Gionin\Exception\ValidationException;
 use Gionin\Model;
+use Gionin\Response\ApiResponse;
+use Gionin\Response\PaginatedResponse;
+use Nyholm\Psr7\Response;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Client\ClientInterface;
 
 class ModelTest extends TestCase
 {
@@ -15,7 +20,6 @@ class ModelTest extends TestCase
             appSecret: 'secret',
             app: 'myapp',
             table: 'mytable',
-            debug: true
         );
 
         $this->assertEquals('testuser', $this->getProperty($model, '_user'));
@@ -23,7 +27,6 @@ class ModelTest extends TestCase
         $this->assertEquals('secret', $this->getProperty($model, '_authKey'));
         $this->assertEquals('myapp', $this->getProperty($model, 'app'));
         $this->assertEquals('mytable', $this->getProperty($model, 'table'));
-        $this->assertTrue($this->getProperty($model, '_debug'));
     }
 
     public function testConstructorDefaults(): void
@@ -33,7 +36,6 @@ class ModelTest extends TestCase
         $this->assertEquals('', $this->getProperty($model, '_user'));
         $this->assertEquals('', $this->getProperty($model, 'app'));
         $this->assertEquals('', $this->getProperty($model, 'table'));
-        $this->assertFalse($this->getProperty($model, '_debug'));
     }
 
     public function testReset(): void
@@ -47,7 +49,7 @@ class ModelTest extends TestCase
 
     public function testFindThrowsOnInvalidType(): void
     {
-        $this->expectException(\Exception::class);
+        $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('Error type for find');
 
         $model = new Model(
@@ -55,7 +57,7 @@ class ModelTest extends TestCase
             appUsername: 'appuser',
             appSecret: 'secret',
             app: 'myapp',
-            table: 'mytable'
+            table: 'mytable',
         );
         $model->find('invalid');
     }
@@ -64,6 +66,79 @@ class ModelTest extends TestCase
     {
         $model = new Model();
         $this->assertEquals(0, $model->total);
+    }
+
+    public function testInsertReturnsApiResponse(): void
+    {
+        $mockClient = $this->createMock(ClientInterface::class);
+        $mockClient->method('sendRequest')
+            ->willReturn(new Response(201, [], '{"_id":"abc123"}'));
+
+        $model = new Model(
+            user: 'testuser',
+            appUsername: 'appuser',
+            appSecret: 'secret',
+            app: 'myapp',
+            table: 'mytable',
+            httpClient: $mockClient,
+        );
+
+        $response = $model->insert(['name' => 'test']);
+        $this->assertInstanceOf(ApiResponse::class, $response);
+        $this->assertEquals(201, $response->statusCode);
+    }
+
+    public function testFindReturnsPaginatedResponse(): void
+    {
+        $responseData = json_encode([
+            '_total' => 2,
+            0 => ['_id' => '1', 'name' => 'Alice'],
+            1 => ['_id' => '2', 'name' => 'Bob'],
+        ]);
+
+        $mockClient = $this->createMock(ClientInterface::class);
+        $mockClient->method('sendRequest')
+            ->willReturn(new Response(200, [], $responseData));
+
+        $model = new Model(
+            user: 'testuser',
+            appUsername: 'appuser',
+            appSecret: 'secret',
+            app: 'myapp',
+            table: 'mytable',
+            httpClient: $mockClient,
+        );
+
+        $response = $model->findAll();
+        $this->assertInstanceOf(PaginatedResponse::class, $response);
+        $this->assertEquals(2, $response->total);
+        $this->assertCount(2, $response->items);
+        $this->assertEquals(2, $model->total);
+    }
+
+    public function testFindFirstReturnsSingleItem(): void
+    {
+        $responseData = json_encode([
+            '_total' => 1,
+            0 => ['_id' => '1', 'name' => 'Alice'],
+        ]);
+
+        $mockClient = $this->createMock(ClientInterface::class);
+        $mockClient->method('sendRequest')
+            ->willReturn(new Response(200, [], $responseData));
+
+        $model = new Model(
+            user: 'testuser',
+            appUsername: 'appuser',
+            appSecret: 'secret',
+            app: 'myapp',
+            table: 'mytable',
+            httpClient: $mockClient,
+        );
+
+        $response = $model->findFirst(['name' => 'Alice']);
+        $this->assertInstanceOf(PaginatedResponse::class, $response);
+        $this->assertCount(1, $response->items);
     }
 
     private function getProperty(object $obj, string $prop): mixed
