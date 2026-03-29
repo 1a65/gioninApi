@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    container_name: gionin-api
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: ["php", "-a"]
+    stdin_open: true
+    tty: true
+
+  test:
+    build: .
+    container_name: gionin-api-test
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: ["vendor/bin/phpunit", "--colors=always"]
+    profiles:
+      - test

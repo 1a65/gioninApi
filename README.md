@@ -4,13 +4,35 @@ PHP wrapper para a API REST da Gionin. Fornece uma interface Model para operaç�
 
 ## Requisitos
 
-- PHP >= 8.1
+- PHP >= 8.4
 - Extensões: `curl`, `json`, `mbstring`
 
 ## Instalação
 
 ```bash
 composer require 1a65/gionin-api
+```
+
+## Docker
+
+### Subir o container
+
+```bash
+docker compose build
+docker compose run --rm app php -v   # verificar PHP
+docker compose run --rm app composer install
+```
+
+### Rodar testes
+
+```bash
+docker compose run --rm test
+```
+
+### Shell interativo
+
+```bash
+docker compose run --rm app php -a
 ```
 
 ## Uso Rápido
@@ -106,6 +128,14 @@ use Gionin\Utf8String;
 $clean = Utf8String::noAccents('São Paulo');        // "Sao Paulo"
 $lower = Utf8String::lowerAndNoAccents('São Paulo'); // "sao paulo"
 $isUtf = Utf8String::isUTF8('texto');                // true
+```
+
+## Testes
+
+```bash
+composer test
+# ou
+vendor/bin/phpunit
 ```
 
 ## Debug
